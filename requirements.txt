@@ -1,0 +1,8 @@
+pandas==2.3.3
+numpy==1.26.4
+scikit-learn==1.6.1
+scikit-survival==0.25.0
+scipy==1.16.3
+xgboost==2.1.4
+xgbse==0.3.3
+joblib==1.5.2
