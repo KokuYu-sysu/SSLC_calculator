@@ -2,17 +2,13 @@
 
 **English** | **[中文版本](README_zh.md)**
 
-This tool does not rely on a web page or `files/app.py`: models, scripts, dependencies, input templates, and tests are all located in this directory.
-
 ## Installation and Usage
 
-Download via:
+Open PowerShell in the directory you like. Download via:
 
 ```powershell
 git clone https://github.com/KokuYu-sysu/SSLC_calculator.git
 ```
-
-Open PowerShell in this directory:
 
 > Note: To avoid conflicts with your global Python environment, it is recommended to create a virtual environment for isolation.
 

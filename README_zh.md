@@ -2,17 +2,13 @@
 
 > **[English Version (README.md)](README.md)**
 
-它不依赖网页或`files/app.py`：模型、脚本、依赖、输入模板和测试都在本目录中。
-
 ## 安装与运行
 
-通过以下方式进行下载：
+在你想要安装的目录下打开powershell，并通过以下方式进行下载：
 
 ```powershell
 git clone https://github.com/KokuYu-sysu/SSLC_calculator.git
 ```
-
-在本目录打开 PowerShell：
 
 > 注意，为了防止与你的总的Python环境发生冲突，建议单独建立虚拟环境进行隔离。
 
