@@ -71,6 +71,11 @@ BREASTFEEDING_FEATURE = {
     "nulliparous": "bfeed_1", "parous_none": "bfeed_1",
     "<6": "bfeed_6", "6-12": "bfeed_12", ">=12": "bfeed_12more",
 }
+FIRST_LIVE_BIRTH_FEATURE = {
+    "nulliparous": "live_birth_age_0", "<20": "live_birth_age_20",
+    "20-25": "live_birth_age_25", "25-30": "live_birth_age_30",
+    ">=30": "live_birth_age_30more",
+}
 ONE_HOT_FAMILIES = {
     "occupation": tuple(OCCUPATION_FEATURE.values()),
     "marital": ("marital_have", "marital_no", "marital_other"),
@@ -78,10 +83,12 @@ ONE_HOT_FAMILIES = {
     "smoking": ("smoking_current", "smoking_ever", "smoking_no"),
     "menopause": tuple(dict.fromkeys(MENOPAUSE_FEATURE.values())),
     "breastfeeding": ("bfeed_1", "bfeed_6", "bfeed_12", "bfeed_12more"),
+    "first_live_birth_age": tuple(FIRST_LIVE_BIRTH_FEATURE.values()),
 }
 FAMILY_SEMANTIC_FEATURES = {
     "marital": {"married": "marital_have", "unmarried": "marital_no", "others": "marital_other"},
     "alcohol": {"never": "alcohol_no", "former": "alcohol_ever", "current": "alcohol_current"},
+    "first_live_birth_age": FIRST_LIVE_BIRTH_FEATURE,
 }
 
 
@@ -192,6 +199,16 @@ def validate_model_groups(groups: object) -> Mapping[str, Mapping[str, object]]:
             _contract_error(subgroup, f"unexpected model class {'.'.join(identity)}")
         if _model_feature_count(subgroup, model, identity) != len(model_features):
             _contract_error(subgroup, "model feature count disagrees with model_features")
+        try:
+            trained_features = (
+                list(model.feature_names_in_)
+                if identity == COXNET_IDENTITY
+                else list(model.feature_extractor.bst.feature_names)
+            )
+        except (AttributeError, TypeError) as exc:
+            _contract_error(subgroup, f"cannot read trained model feature names: {exc}")
+        if trained_features != model_features:
+            _contract_error(subgroup, "trained model feature names/order disagree with model_features")
     return groups
 
 
@@ -222,8 +239,8 @@ def _group_time_range(subgroup: str, package: Mapping[str, object]) -> tuple[Dec
             _contract_error(subgroup, f"cannot read CoxNet baseline times: {exc}")
     elif identity == XGBSE_IDENTITY:
         try:
-            times = np.asarray(package["metadata"]["time_bins"], dtype=float)
-        except Exception as exc:  # pragma: no cover - corrupt metadata
+            times = np.asarray(model.time_bins, dtype=float)
+        except Exception as exc:  # pragma: no cover - corrupt trained state
             _contract_error(subgroup, f"cannot read XGBSE time bins: {exc}")
     else:  # pragma: no cover - guarded by validate_model_groups
         _contract_error(subgroup, "unsupported survival model")
@@ -472,11 +489,31 @@ def _resolve_feature(
 ) -> float | None:
     if feature == "age":
         return _finite_number(row, "age", issues, minimum=40, maximum=80)
+    if feature == "gender":
+        derived = float(row["sex"] == "female")
+        direct = _finite_number(row, "gender", issues, minimum=0, maximum=1, integer=True)
+        return _pick_value(direct, derived, "gender", "sex", issues)
+    if feature == "first_period_age_new":
+        direct = _finite_number(row, feature, issues, minimum=0, maximum=80)
+        alternate = _finite_number(row, "first_period_age", issues, minimum=0, maximum=80)
+        value = _pick_value(direct, alternate, feature, "first_period_age", issues)
+        if value is None:
+            _add_issue(issues, "missing_field", "missing first_period_age_new or first_period_age")
+        return value
     if feature == "BMI_new":
         direct = _finite_number(row, "BMI_new", issues, minimum=np.nextafter(0.0, 1.0))
         height = _finite_number(row, "height", issues, minimum=np.nextafter(0.0, 1.0), maximum=250)
         weight = _finite_number(row, "weight", issues, minimum=np.nextafter(0.0, 1.0), maximum=200)
-        derived = weight / (height / 100) ** 2 if height is not None and weight is not None else None
+        derived = None
+        if height is not None and weight is not None:
+            denominator = (height / 100) ** 2
+            if denominator == 0:
+                _add_issue(issues, "invalid_value", "height produces an invalid BMI")
+            else:
+                derived = weight / denominator
+                if not math.isfinite(derived) or derived <= 0:
+                    _add_issue(issues, "invalid_value", "height/weight produces an invalid BMI")
+                    derived = None
         value = _pick_value(direct, derived, "BMI_new", "height/weight", issues)
         if value is None:
             _add_issue(issues, "missing_field", "missing BMI_new or both height and weight")
@@ -505,9 +542,19 @@ def _resolve_feature(
         semantic, multiplier = continuous_specs[feature]
         direct = _finite_number(row, feature, issues, minimum=0)
         alternate_raw = _finite_number(row, semantic, issues, minimum=0)
-        alternate = alternate_raw * multiplier if alternate_raw is not None else None
+        alternate = None
+        if alternate_raw is not None:
+            alternate = (
+                alternate_raw / 20
+                if feature == "smoking_pack_day_new"
+                else alternate_raw * multiplier
+            )
         value = _pick_value(direct, alternate, feature, semantic, issues)
-        if feature == "smoke_quit_year_new" and subgroup == "male_smoker":
+        if subgroup.endswith("nonsmoker") and feature != "ps_year_new":
+            if value is not None and value != 0.0:
+                _add_issue(issues, "conflicting_value", f"never smokers must have {feature} equal to 0")
+            return 0.0
+        if feature == "smoke_quit_year_new" and subgroup.endswith("_smoker"):
             status = _text_value(row, "smoking_status", issues)
             if status == "current":
                 if value is not None and value != 0.0:
@@ -600,6 +647,14 @@ def _encode_row(row: Mapping[str, object], groups: Mapping[str, Mapping[str, obj
             value = _resolve_feature(row, feature, subgroup, issues)
             if value is not None:
                 features[feature] = float(value)
+    if "live_birth_age_0" in features:
+        nulliparous = features["live_birth_age_0"] == 1.0
+        breastfeeding = _text_value(row, "breastfeeding", issues)
+        if breastfeeding in BREASTFEEDING_FEATURE:
+            if nulliparous != (breastfeeding == "nulliparous"):
+                _add_issue(issues, "conflicting_value", "breastfeeding must agree with first_live_birth_age")
+        elif nulliparous and "bfeed_1" in features and features["bfeed_1"] != 1.0:
+            _add_issue(issues, "conflicting_value", "nulliparous rows must have bfeed_1 equal to 1")
     missing_features = [feature for feature in input_features if feature not in features]
     if missing_features and not issues:
         _add_issue(issues, "missing_field", f"missing model features: {missing_features!r}")
@@ -691,11 +746,20 @@ SEMANTIC_COLUMNS = {
     "alcohol", "exercise", "oil_smoke", "pickled", "protein", "vegetable", "height",
     "weight", "cancer_history", "family_cancer_count", "copd", "chronic_resp", "diabetes",
     "hypertension", "chd", "liver", "tb", "menopause", "breastfeeding",
+    "first_period_age", "first_live_birth_age",
 }
 
 
-def _feature_has_source_column(feature: str, columns: set[str]) -> bool:
+def _feature_has_source_column(feature: str, columns: set[str], subgroup: str = "") -> bool:
     if feature in columns:
+        return True
+    if feature == "gender" and "sex" in columns:
+        return True
+    smoking_numeric = {"smoke_total_year_new", "smoking_pack_day_new", "smoke_quit_year_new"}
+    if subgroup.endswith("nonsmoker") and feature in smoking_numeric and "smoking" in columns:
+        return True
+    if feature == "smoke_quit_year_new" and "smoking_status" in columns:
+        # Current smokers derive zero; former smokers are checked row by row.
         return True
     aliases = {
         "BMI_new": {"height", "weight"}, "education.y": {"education"},
@@ -705,11 +769,12 @@ def _feature_has_source_column(feature: str, columns: set[str]) -> bool:
         "CVD": {"chd"}, "COPD_self": {"copd"}, "CRD_other": {"chronic_resp"},
         "liver_condition": {"liver"}, "TB_new": {"tb"}, "Freq_pickled": {"pickled"},
         "Freq_protein": {"protein"}, "Freq_vegetable": {"vegetable"},
+        "first_period_age_new": {"first_period_age"},
     }
     for family, members in ONE_HOT_FAMILIES.items():
         if feature in members and family in columns:
             return True
-    return aliases.get(feature, set()).issubset(columns)
+    return feature in aliases and aliases[feature].issubset(columns)
 
 
 def build_schema_report(columns: list[str], groups: Mapping[str, Mapping[str, object]]) -> dict[str, object]:
@@ -721,7 +786,7 @@ def build_schema_report(columns: list[str], groups: Mapping[str, Mapping[str, ob
     missing_by_subgroup = {
         subgroup: [
             feature for feature in package["input_features"]
-            if not _feature_has_source_column(feature, source_columns)
+            if not _feature_has_source_column(feature, source_columns, subgroup)
         ]
         for subgroup, package in groups.items()
     }
@@ -731,6 +796,7 @@ def build_schema_report(columns: list[str], groups: Mapping[str, Mapping[str, ob
         "model_ready_columns": [column for column in columns if column in model_columns],
         "unknown_columns": [column for column in columns if column not in recognized],
         "missing_by_subgroup": missing_by_subgroup,
+        "missing_routing_columns": [column for column in ("sex", "smoking") if column not in source_columns],
     }
 
 
