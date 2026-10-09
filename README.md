@@ -1,6 +1,6 @@
 # SSLC Risk Batch-Calculator
 
-**English** | **[中文版本](README_zh.md)**
+**English** | **[中文](README_zh.md)**
 
 Batch calculation of lung cancer mortality risk from clinical CSV tables. The bundled `models.pkl` is the updated `model_groups_dict_de_compact.pkl`, containing the fitted model, subgroup-specific scaler, and ordered feature lists for each of the four sex/smoking subgroups. This directory works independently of the website.
 
