@@ -103,18 +103,6 @@ The script refuses to overwrite the input file, existing output files, or existi
 
 If `[existing_output]: refusing to overwrite an existing output file` occurs, move the previous outputs or choose unused paths for all three output files.
 
-## Verification
-
-Run the bundled regression tests from this directory:
-
-```powershell
-python -B -m unittest discover -s tests -p test_batch_risk.py -v
-```
-
-They check the updated artifact, all four subgroups, reference risks at 5/7/10 years, categorical and numeric/one-hot inputs, new female fields, smoking and sex consistency, missing-column reports, and batch CSV/error outputs. These checks verify inference integration; they do not establish clinical calibration or external validity of the trained models.
-
-During the 2026-10-09 update, 160 synthetic clinical profiles (40 per subgroup) were also compared with the updated website encoder and the original fitted models/scalers. All feature encodings matched; the 480 risk values at 5, 7.5, and 10 years had a maximum absolute difference of 0. The bundled model is a byte-for-byte copy of the supplied updated compact artifact; its SHA-256 is `def0d7ae2f87ae924703c767e22a1765cc307f7aa5ea20159c4d3eb08465838c`.
-
 ## More Help
 
 ```powershell

@@ -103,18 +103,6 @@ python batch_risk.py input.csv --output result.csv --errors problems.csv --schem
 
 若出现 `[existing_output]：refusing to overwrite an existing output file`，请移动已有输出文件，或为三个输出文件分别指定尚未使用的路径。
 
-## 验证
-
-在本文件夹中运行随附的回归测试：
-
-```powershell
-python -B -m unittest discover -s tests -p test_batch_risk.py -v
-```
-
-测试覆盖新模型文件、四个亚组、5/7/10 年参考风险、分类与数值/独热输入、新增女性变量、吸烟和性别一致性、缺失列报告及批量结果/错误文件。这些检查验证模型推理集成，不代替训练模型的临床校准或外部验证。
-
-2026-10-09 更新时，还将 160 组模拟临床资料（每个亚组 40 组）与更新后网站的编码及原始拟合模型/标准化器交叉核对。全部特征编码一致，5、7.5、10 年共 480 个风险值的最大绝对差为 0。随附模型是所提供新版 compact 文件的逐字节副本，SHA-256 为 `def0d7ae2f87ae924703c767e22a1765cc307f7aa5ea20159c4d3eb08465838c`。
-
 ## 更多帮助
 
 ```powershell
