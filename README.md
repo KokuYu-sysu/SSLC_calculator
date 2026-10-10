@@ -2,7 +2,7 @@
 
 **English** | **[中文](README_zh.md)**
 
-Batch calculation of lung cancer mortality risk from clinical CSV tables. The bundled `models.pkl` is the updated `model_groups_dict_de_compact.pkl`, containing the fitted model, subgroup-specific scaler, and ordered feature lists for each of the four sex/smoking subgroups. This directory works independently of the website.
+Batch calculation of lung cancer mortality risk from clinical CSV tables. The bundled `models.pkl` contains the fitted model, subgroup-specific scaler, and ordered feature lists for each of the four sex/smoking subgroups. This directory works independently of the website.
 
 ## Installation and Usage
 
@@ -32,7 +32,7 @@ To specify a different time window, e.g., 7 years:
 python batch_risk.py input.csv --time 7
 ```
 
-The result column will be `risk_7y`. The updated models share the inclusive time range **1.4839228235646376–10.55532786885245 years**, so 5, 7, and 10 years are supported. The script reads this range from the fitted models, including `model.time_bins` for XGBSE. Values outside the shared range are rejected before calculation. Decimal horizons are supported, e.g., `--time 7.5` produces `risk_7_5y`. CoxNet uses its fitted survival step function; XGBSE uses the latest available time bin at or before the requested horizon, without interpolation.
+The result column will be `risk_7y`. The updated models share the inclusive time range **1.48–10.56 years**, so 5, 7, and 10 years are supported. The script reads this range from the fitted models, including `model.time_bins` for XGBSE. Values outside the shared range are rejected before calculation. Decimal horizons are supported, e.g., `--time 7.5` produces `risk_7_5y`. CoxNet uses its fitted survival step function; XGBSE uses the latest available time bin at or before the requested horizon, without interpolation.
 
 Risks are probabilities from 0 to 1, not percentages: `0.01` means 1% lung cancer mortality risk within the requested period.
 
